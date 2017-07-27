@@ -25,6 +25,7 @@ from builtins import *  # noqa
 import ycm_core
 import os
 import inspect
+import subprocess
 import re
 from future.utils import PY2, native
 from ycmd import extra_conf_store
@@ -511,6 +512,19 @@ def _MacIncludePaths():
   # This method exists for testing only
   return MAC_INCLUDE_PATHS
 
+def _ClangSystemIncludes():
+    includes = []
+    regex = re.compile(ur'(?:\#include \<...\> search starts here\:)(?P<list>.*?)(?:End of search list)', re.DOTALL);
+    process = subprocess.Popen(['clang-4.0', '-v', '-E', '-x', 'c++', '-'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE);
+    process_out, process_err = process.communicate('');
+    output = process_out + process_err;
+    includes = [];
+    for p in re.search(regex, output).group('list').split('\n'):
+        p = p.strip();
+        if len(p) > 0 and p.find('(framework directory)') < 0:
+            includes.append('-isystem');
+            includes.append(p);
+    return includes
 
 def _ExtraClangFlags():
   flags = _SpecialClangIncludes()
@@ -549,7 +563,10 @@ def _EnableTypoCorrection( flags ):
 def _SpecialClangIncludes():
   libclang_dir = os.path.dirname( ycm_core.__file__ )
   path_to_includes = os.path.join( libclang_dir, 'clang_includes' )
-  return [ '-resource-dir=' + path_to_includes ]
+  flags = [ '-resource-dir=' + path_to_includes ] 
+  # Clang system includes
+  flags.extend(_ClangSystemIncludes())
+  return flags
 
 
 def _MakeRelativePathsInFlagsAbsolute( flags, working_directory ):
